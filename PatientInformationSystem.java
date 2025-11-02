@@ -1,17 +1,5 @@
 import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableModel;
-import javax.swing.table.TableRowSorter;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import javax.swing.RowFilter;
-import javax.swing.filechooser.FileNameExtensionFilter;
-import java.awt.*;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.io.*;
-import java.nio.file.*;
-import java.util.List;
 
 public class PatientInformationSystem {
     // Parallel arrays to store patient information
@@ -186,7 +174,7 @@ public class PatientInformationSystem {
                 addPatient();
                 break;
             case "2":
-                showPatientsTable();
+                displayAllPatients();
                 break;
             case "3":
                 searchPatient();
@@ -355,221 +343,42 @@ public class PatientInformationSystem {
                 "Success", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    // Interactive JTable view for patients with Edit/Delete actions
-    private static void showPatientsTable() {
-        String[] cols = { "ID", "Name", "Age", "Gender", "Diagnosis", "Past Illnesses", "Symptoms" };
-        DefaultTableModel model = new DefaultTableModel(cols, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false; // edit via dialog
-            }
-        };
+    // Method to display all patients
+    private static void displayAllPatients() {
+        if (patientCount == 0) {
+            JOptionPane.showMessageDialog(null,
+                    "No patients in the system!",
+                    "Information", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // Build an HTML table for nicer formatting in JOptionPane
+        StringBuilder html = new StringBuilder();
+        html.append("<html><body>");
+        html.append("<h3>All Patient Records (Total: ").append(patientCount).append(")</h3>");
+        html.append("<table border='1' cellpadding='4' cellspacing='0'>");
+        // header
+        html.append("<tr style='background:#ddd;color:#000;font-weight:bold;'>");
+        html.append(
+                "<th>ID</th><th>Name</th><th>Age</th><th>Gender</th><th>Diagnosis</th><th>Past Illnesses</th><th>Symptoms</th>");
+        html.append("</tr>");
 
         for (int i = 0; i < patientCount; i++) {
-            model.addRow(new Object[] { patientIDs[i], patientNames[i], patientAges[i], patientGenders[i],
-                    patientDiagnoses[i], patientPastIllnesses[i], patientSymptoms[i] });
+            html.append("<tr>");
+            html.append("<td>").append(escapeHtml(patientIDs[i])).append("</td>");
+            html.append("<td>").append(escapeHtml(patientNames[i])).append("</td>");
+            html.append("<td align='center'>").append(patientAges[i]).append("</td>");
+            html.append("<td>").append(escapeHtml(patientGenders[i])).append("</td>");
+            html.append("<td>").append(escapeHtml(patientDiagnoses[i])).append("</td>");
+            html.append("<td>").append(escapeHtml(patientPastIllnesses[i])).append("</td>");
+            html.append("<td>").append(escapeHtml(patientSymptoms[i])).append("</td>");
+            html.append("</tr>");
         }
 
-        JTable table = new JTable(model);
-        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        // Add sorting capability
-        TableRowSorter<TableModel> sorter = new TableRowSorter<>(model);
-        table.setRowSorter(sorter);
-        // Set number comparator for ID and Age columns
-        sorter.setComparator(0,
-                (s1, s2) -> Integer.compare(Integer.parseInt((String) s1), Integer.parseInt((String) s2))); // ID
-        sorter.setComparator(2, Comparator.comparingInt(o -> (Integer) o)); // Age
+        html.append("</table>");
+        html.append("</body></html>");
 
-        JScrollPane scroll = new JScrollPane(table);
-
-        JDialog dialog = new JDialog((Frame) null, "Patient Records", true);
-        dialog.setLayout(new BorderLayout(8, 8));
-
-        // Filter panel
-        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
-        JLabel filterLabel = new JLabel("Filter:");
-        JTextField filterField = new JTextField(20);
-        filterPanel.add(filterLabel);
-        filterPanel.add(filterField);
-
-        // Filter functionality
-        filterField.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) {
-                filter();
-            }
-
-            public void removeUpdate(DocumentEvent e) {
-                filter();
-            }
-
-            public void changedUpdate(DocumentEvent e) {
-                filter();
-            }
-
-            private void filter() {
-                String text = filterField.getText();
-                if (text.trim().length() == 0) {
-                    sorter.setRowFilter(null);
-                } else {
-                    sorter.setRowFilter(RowFilter.regexFilter("(?i)" + text));
-                }
-            }
-        });
-
-        dialog.add(filterPanel, BorderLayout.NORTH);
-        dialog.add(scroll, BorderLayout.CENTER);
-
-        JPanel btns = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton exportBtn = new JButton("Export to CSV");
-        JButton importBtn = new JButton("Import from CSV");
-        JButton editBtn = new JButton("Edit");
-        JButton deleteBtn = new JButton("Delete");
-        JButton closeBtn = new JButton("Close");
-
-        btns.add(importBtn);
-        btns.add(exportBtn);
-        btns.add(editBtn);
-        btns.add(deleteBtn);
-        btns.add(closeBtn);
-        dialog.add(btns, BorderLayout.SOUTH);
-
-        // Import CSV action
-        importBtn.addActionListener(e -> importFromCSV());
-
-        // Export CSV action
-        exportBtn.addActionListener(e -> exportToCSV());
-
-        // Edit action
-        editBtn.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row == -1) {
-                JOptionPane.showMessageDialog(dialog, "Please select a patient to edit.", "No selection",
-                        JOptionPane.INFORMATION_MESSAGE);
-                return;
-            }
-            editPatientDialog(dialog, row, model);
-        });
-
-        // Delete action
-        deleteBtn.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row == -1) {
-                JOptionPane.showMessageDialog(dialog, "Please select a patient to delete.", "No selection",
-                        JOptionPane.INFORMATION_MESSAGE);
-                return;
-            }
-            int confirm = JOptionPane.showConfirmDialog(dialog, "Delete selected patient?", "Confirm Delete",
-                    JOptionPane.YES_NO_OPTION);
-            if (confirm == JOptionPane.YES_OPTION) {
-                removePatientAt(row);
-                model.removeRow(row);
-            }
-        });
-
-        closeBtn.addActionListener(e -> dialog.dispose());
-
-        dialog.setSize(900, 400);
-        dialog.setLocationRelativeTo(null);
-        dialog.setVisible(true);
-    }
-
-    // Show edit dialog for selected patient row and update model/arrays
-    private static void editPatientDialog(Window parent, int row, DefaultTableModel model) {
-        // Current values
-        String id = (String) model.getValueAt(row, 0);
-        String name = (String) model.getValueAt(row, 1);
-        int age = (int) model.getValueAt(row, 2);
-        String gender = (String) model.getValueAt(row, 3);
-        String diagnosis = (String) model.getValueAt(row, 4);
-        String pastIllnesses = (String) model.getValueAt(row, 5);
-        String symptoms = (String) model.getValueAt(row, 6);
-
-        String newName = JOptionPane.showInputDialog(parent, "Edit Name:", name);
-        if (newName == null || newName.trim().isEmpty()) {
-            return;
-        }
-
-        String newAgeStr = JOptionPane.showInputDialog(parent, "Edit Age:", String.valueOf(age));
-        if (newAgeStr == null) {
-            return;
-        }
-        int newAge;
-        try {
-            newAge = Integer.parseInt(newAgeStr.trim());
-            if (newAge < 0 || newAge > 150) {
-                throw new NumberFormatException();
-            }
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(parent, "Invalid age. Edit cancelled.", "Error", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        String[] genderOptions = { "Male", "Female", "Other" };
-        String newGender = (String) JOptionPane.showInputDialog(parent, "Edit Gender:", "Edit",
-                JOptionPane.PLAIN_MESSAGE, null, genderOptions, gender);
-        if (newGender == null) {
-            return;
-        }
-
-        String newDiagnosis = JOptionPane.showInputDialog(parent, "Edit Diagnosis:", diagnosis);
-        if (newDiagnosis == null) {
-            return;
-        }
-
-        String newPast = JOptionPane.showInputDialog(parent, "Edit Past Illnesses:", pastIllnesses);
-        if (newPast == null) {
-            return;
-        }
-
-        String newSymptoms = JOptionPane.showInputDialog(parent, "Edit Symptoms:", symptoms);
-        if (newSymptoms == null) {
-            return;
-        }
-
-        // Update arrays by locating index of ID
-        int idx = findPatientIndex(id);
-        if (idx != -1) {
-            patientNames[idx] = newName.trim();
-            patientAges[idx] = newAge;
-            patientGenders[idx] = newGender;
-            patientDiagnoses[idx] = newDiagnosis.trim();
-            patientPastIllnesses[idx] = newPast.trim();
-            patientSymptoms[idx] = newSymptoms.trim();
-
-            // Update table model
-            model.setValueAt(newName.trim(), row, 1);
-            model.setValueAt(newAge, row, 2);
-            model.setValueAt(newGender, row, 3);
-            model.setValueAt(newDiagnosis.trim(), row, 4);
-            model.setValueAt(newPast.trim(), row, 5);
-            model.setValueAt(newSymptoms.trim(), row, 6);
-        }
-    }
-
-    // Remove patient at index and shift arrays left
-    private static void removePatientAt(int index) {
-        if (index < 0 || index >= patientCount) {
-            return;
-        }
-        for (int i = index; i < patientCount - 1; i++) {
-            patientIDs[i] = patientIDs[i + 1];
-            patientNames[i] = patientNames[i + 1];
-            patientAges[i] = patientAges[i + 1];
-            patientGenders[i] = patientGenders[i + 1];
-            patientDiagnoses[i] = patientDiagnoses[i + 1];
-            patientPastIllnesses[i] = patientPastIllnesses[i + 1];
-            patientSymptoms[i] = patientSymptoms[i + 1];
-        }
-        // Clear last slot
-        int last = patientCount - 1;
-        patientIDs[last] = null;
-        patientNames[last] = null;
-        patientAges[last] = 0;
-        patientGenders[last] = null;
-        patientDiagnoses[last] = null;
-        patientPastIllnesses[last] = null;
-        patientSymptoms[last] = null;
-        patientCount--;
+        JOptionPane.showMessageDialog(null, html.toString(), "All Patients", JOptionPane.INFORMATION_MESSAGE);
     }
 
     // Method to search for a patient
@@ -758,160 +567,4 @@ public class PatientInformationSystem {
         }
     }
 
-    // Export patient records to CSV
-    private static void exportToCSV() {
-        if (patientCount == 0) {
-            JOptionPane.showMessageDialog(null, "No patients to export!", "Export", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Export to CSV");
-        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
-
-        if (fileChooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
-            String path = file.getAbsolutePath();
-            if (!path.toLowerCase().endsWith(".csv")) {
-                file = new File(path + ".csv");
-            }
-
-            try (PrintWriter writer = new PrintWriter(file)) {
-                // Write header
-                writer.println("ID,Name,Age,Gender,Diagnosis,Past Illnesses,Symptoms");
-
-                // Write data
-                for (int i = 0; i < patientCount; i++) {
-                    writer.printf("%s,%s,%d,%s,%s,%s,%s%n",
-                            escapeCSV(patientIDs[i]),
-                            escapeCSV(patientNames[i]),
-                            patientAges[i],
-                            escapeCSV(patientGenders[i]),
-                            escapeCSV(patientDiagnoses[i]),
-                            escapeCSV(patientPastIllnesses[i]),
-                            escapeCSV(patientSymptoms[i]));
-                }
-                JOptionPane.showMessageDialog(null,
-                        String.format("Successfully exported %d patients to %s", patientCount, file.getName()),
-                        "Export Success",
-                        JOptionPane.INFORMATION_MESSAGE);
-            } catch (IOException ex) {
-                JOptionPane.showMessageDialog(null,
-                        "Error exporting to CSV: " + ex.getMessage(),
-                        "Export Error",
-                        JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
-
-    // Import patient records from CSV
-    private static void importFromCSV() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Import from CSV");
-        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
-
-        if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
-
-            try {
-                List<String> lines = Files.readAllLines(file.toPath());
-                if (lines.size() < 2) {
-                    throw new IOException("CSV file is empty or missing header");
-                }
-
-                // Skip header row, process data rows
-                int imported = 0;
-                for (int i = 1; i < lines.size(); i++) {
-                    String[] parts = splitCSVLine(lines.get(i));
-                    if (parts.length != 7) {
-                        continue; // Skip invalid lines
-                    }
-
-                    // Validate ID and check for duplicates
-                    String id = parts[0].trim();
-                    if (!id.matches("\\d+") || findPatientIndex(id) != -1) {
-                        continue; // Skip invalid or duplicate IDs
-                    }
-
-                    // Validate age
-                    int age;
-                    try {
-                        age = Integer.parseInt(parts[2].trim());
-                        if (age < 0 || age > 150)
-                            continue;
-                    } catch (NumberFormatException e) {
-                        continue;
-                    }
-
-                    if (patientCount >= 100) {
-                        JOptionPane.showMessageDialog(null,
-                                "Patient database is full! Imported " + imported + " records.",
-                                "Import Partial",
-                                JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    // Store valid record
-                    patientIDs[patientCount] = id;
-                    patientNames[patientCount] = parts[1].trim();
-                    patientAges[patientCount] = age;
-                    patientGenders[patientCount] = parts[3].trim();
-                    patientDiagnoses[patientCount] = parts[4].trim();
-                    patientPastIllnesses[patientCount] = parts[5].trim();
-                    patientSymptoms[patientCount] = parts[6].trim();
-                    patientCount++;
-                    imported++;
-                }
-
-                if (imported > 0) {
-                    JOptionPane.showMessageDialog(null,
-                            String.format("Successfully imported %d patients", imported),
-                            "Import Success",
-                            JOptionPane.INFORMATION_MESSAGE);
-                } else {
-                    JOptionPane.showMessageDialog(null,
-                            "No valid records found to import",
-                            "Import Failed",
-                            JOptionPane.WARNING_MESSAGE);
-                }
-
-            } catch (IOException ex) {
-                JOptionPane.showMessageDialog(null,
-                        "Error importing from CSV: " + ex.getMessage(),
-                        "Import Error",
-                        JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
-
-    // Helper method to escape special characters in CSV
-    private static String escapeCSV(String s) {
-        if (s == null)
-            return "";
-        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
-            return "\"" + s.replace("\"", "\"\"") + "\"";
-        }
-        return s;
-    }
-
-    // Helper method to properly split CSV lines handling quoted fields
-    private static String[] splitCSVLine(String line) {
-        List<String> result = new ArrayList<>();
-        boolean inQuotes = false;
-        StringBuilder field = new StringBuilder();
-
-        for (char c : line.toCharArray()) {
-            if (c == '\"') {
-                inQuotes = !inQuotes;
-            } else if (c == ',' && !inQuotes) {
-                result.add(field.toString());
-                field.setLength(0);
-            } else {
-                field.append(c);
-            }
-        }
-        result.add(field.toString()); // Add last field
-
-        return result.toArray(new String[0]);
-    }
 }
